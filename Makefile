@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 18
 SUBLEVEL = 70
-EXTRAVERSION = -HolyDragon-v0.0.0.2
+EXTRAVERSION = -HolyDragon-v0.0.7.0
 NAME = Shuffling Zombie Juror
 
 # *DOCUMENTATION*
