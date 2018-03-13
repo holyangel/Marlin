@@ -250,10 +250,10 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/x86/ -e s/x86_64/x86/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 ARCH		?= $(SUBARCH)
 CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:"%"=%)
-HDK_TC		:= /home/holyangel/android/aarch64-linux-android-gcc-4.9/bin/
+HDK_TC		:= /home/holyangel/android/sdclang-4.9.4/bin/
 ARCH		:= arm64
 SUBARCH		:= arm64
-CROSS_COMPILE	:= $(HDK_TC)aarch64-linux-android-
+CROSS_COMPILE	:= $(HDK_TC)aarch64-cortex_a57-linux-gnueabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -299,10 +299,60 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
+# HolyDragon Optimization Flags #
+
+GRAPHITE = -fgraphite -fgraphite-identity -floop-interchange -ftree-loop-distribution -floop-strip-mine -floop-block -ftree-loop-linear
+
+# Extra GCC Optimizations	  
+EXTRA_OPTS := \
+	-falign-loops -falign-functions \
+	-fira-hoist-pressure -fira-loop-pressure \
+	-fsched-pressure -fsched-spec-load -ftree-vectorize \
+	-fno-guess-branch-probability -fpredictive-commoning \
+	-fvect-cost-model=cheap -fsimd-cost-model=cheap \
+	-ftree-partial-pre -fno-gcse
+
+# Arm Architecture Specific
+# fall back to -march=armv8-a in case the compiler isn't compatible
+# with -mcpu and -mtune
+ARM_ARCH_OPT := \
+	$(call cc-option,-march=armv8.1-a+crc+lse+crypto+fp+simd,) \
+	-mtune=cortex-a57 -mcpu=cortex-a57+crc+crypto+fp+simd \
+	--param l1-cache-line-size=64 --param l1-cache-size=32 --param l2-cache-size=512 
+
+# Optional
+GEN_OPT_FLAGS := \
+ -DNDEBUG -pipe \
+ -fomit-frame-pointer 
+
+LTO_FLAGS := -flto -fuse-linker-plugin -fuse-ld=qcld
+
+POLLY_FLAGS := -mllvm -polly \
+	-mllvm -polly-parallel \
+	-mllvm -polly-run-dce \
+	-mllvm -polly-run-inliner \
+	-mllvm -polly-opt-fusion=max \
+	-mllvm -polly-ast-use-context \
+	-mllvm -polly-detect-keep-going \
+	-mllvm -polly-vectorizer=stripmine \
+	-mllvm -enable-select-to-intrinsics
+
+OPT_FLAGS := -O3 \
+	-march=armv8-a+crypto -mcpu=cortex-a53+crypto -mfpu=crypto-neon-fp-armv8 \
+	$(POLLY_FLAGS)
+
+LTO_TRIPLE = $(HDK_TC)lto-	
+LLVM_TRIPLE = $(HDK_TC)llvm-
+CLANG_TRIPLE = $(HDK_TC)clang
+CPP_TRIPLE = $(HDK_TC)clang++
+
+CLANG_IA_FLAG += -no-integrated-as
+CLANG_FLAGS := $(CLANG_TRIPLE) $(CLANG_IA_FLAG) $(OPT_FLAGS)
+
 HOSTCC       = gcc
 HOSTCXX      = g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer -std=gnu89
-HOSTCXXFLAGS = -O2
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer -std=gnu89 $(GEN_OPT_FLAGS) $(EXTRA_OPTS) $(GRAPHITE)
+HOSTCXXFLAGS = -O2 $(GEN_OPT_FLAGS) $(ARM_ARCH_OPT) $(EXTRA_OPTS) $(GRAPHITE)
 
 ifeq ($(shell $(HOSTCC) -v 2>&1 | grep -c "clang version"), 1)
 HOSTCFLAGS  += -Wno-unused-value -Wno-unused-parameter \
@@ -357,10 +407,10 @@ include $(srctree)/scripts/Kbuild.include
 
 # Make variables (CC, etc...)
 AS		= $(CROSS_COMPILE)as
-LD		= $(CROSS_COMPILE)ld
-CC		= $(CROSS_COMPILE)gcc
-CPP		= $(CC) -E
-AR		= $(CROSS_COMPILE)ar
+LD		= $(CROSS_COMPILE)ld -fuse-ld=qcld --strip-debug
+CC		= $(CROSS_COMPILE)gcc -g0
+CPP		= $(CC) -E -flto -fuse-linker-plugin
+AR		= $(LLVM_TRIPLE)ar
 NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
 OBJCOPY		= $(CROSS_COMPILE)objcopy
@@ -377,9 +427,9 @@ CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
-LDFLAGS_MODULE  =
-CFLAGS_KERNEL	=
-AFLAGS_KERNEL	=
+LDFLAGS_MODULE  = --strip-debug
+CFLAGS_KERNEL	= $(GEN_OPT_FLAGS) $(ARM_ARCH_OPT) $(EXTRA_OPTS)
+AFLAGS_KERNEL	= $(CFLAGS_KERNEL) -flto -fuse-linker-plugin -r
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage -fno-tree-loop-im
 CFLAGS_KCOV	= -fsanitize-coverage=trace-pc
 
@@ -407,13 +457,14 @@ KBUILD_CFLAGS   := -Werror -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -std=gnu89
+		   -std=gnu89 \
+		   $(GEN_OPT_FLAGS) $(ARM_ARCH_OPT) $(EXTRA_OPTS)
 
-KBUILD_AFLAGS_KERNEL :=
-KBUILD_CFLAGS_KERNEL :=
+KBUILD_AFLAGS_KERNEL := $(CFLAGS_KERNEL) $(GEN_OPT_FLAGS) -flto -fuse-linker-plugin -r
+KBUILD_CFLAGS_KERNEL := $(GEN_OPT_FLAGS) $(ARM_ARCH_OPT) $(EXTRA_OPTS)
 KBUILD_AFLAGS   := -D__ASSEMBLY__
-KBUILD_AFLAGS_MODULE  := -DMODULE
-KBUILD_CFLAGS_MODULE  := -DMODULE
+KBUILD_AFLAGS_MODULE  := -DMODULE $(GEN_OPT_FLAGS)
+KBUILD_CFLAGS_MODULE  := -DMODULE $(GEN_OPT_FLAGS)
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
@@ -424,7 +475,8 @@ export VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION
 export ARCH SRCARCH CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE AS LD CC
 export CPP AR NM STRIP OBJCOPY OBJDUMP
 export MAKE AWK GENKSYMS INSTALLKERNEL PERL PYTHON UTS_MACHINE
-export HOSTCXX HOSTCXXFLAGS LDFLAGS_MODULE CHECK CHECKFLAGS
+export HOSTCXX HOSTCXXFLAGS LDFLAGS_MODULE CHECK CHECKFLAGS 
+export GEN_OPT_FLAGS ARM_ARCH_OPT EXTRA_OPTS
 
 export KBUILD_CPPFLAGS NOSTDINC_FLAGS LINUXINCLUDE OBJCOPYFLAGS LDFLAGS
 export KBUILD_CFLAGS CFLAGS_KERNEL CFLAGS_MODULE CFLAGS_GCOV CFLAGS_KCOV CFLAGS_KASAN CFLAGS_UBSAN
@@ -625,25 +677,25 @@ KBUILD_AFLAGS	+= $(call cc-option,-fno-PIE)
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
 else
-KBUILD_CFLAGS	+= -O2
+KBUILD_CFLAGS	+= -O2 $(call cc-disable-warning,maybe-uninitialized,) $(GEN_OPT_FLAGS) $(ARM_ARCH_OPT) $(EXTRA_OPTS)
 endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
 
-ifdef CONFIG_READABLE_ASM
+#ifdef CONFIG_READABLE_ASM
 # Disable optimizations that make assembler listings hard to read.
 # reorder blocks reorders the control in the function
 # ipa clone creates specialized cloned functions
 # partial inlining inlines only parts of functions
-KBUILD_CFLAGS += $(call cc-option,-fno-reorder-blocks,) \
-                 $(call cc-option,-fno-ipa-cp-clone,) \
-                 $(call cc-option,-fno-partial-inlining)
-endif
+#KBUILD_CFLAGS += $(call cc-option,-fno-reorder-blocks,) \
+#                 $(call cc-option,-fno-ipa-cp-clone,) \
+#                 $(call cc-option,-fno-partial-inlining)
+#endif
 
-ifneq ($(CONFIG_FRAME_WARN),0)
-KBUILD_CFLAGS += $(call cc-option,-Wframe-larger-than=${CONFIG_FRAME_WARN})
-endif
+# ifneq ($(CONFIG_FRAME_WARN),0)
+# KBUILD_CFLAGS += $(call cc-option,-Wframe-larger-than=${CONFIG_FRAME_WARN})
+# endif
 
 # Handle stack protector mode.
 #
@@ -710,6 +762,8 @@ KBUILD_CFLAGS += $(call cc-disable-warning, tautological-compare)
 # See modpost pattern 2
 KBUILD_CFLAGS += $(call cc-option, -mno-global-merge,)
 KBUILD_CFLAGS += $(call cc-option, -fcatch-undefined-behavior)
+KBUILD_CFLAGS += $(call cc-option, -no-integrated-as)
+KBUILD_AFLAGS += $(call cc-option, -no-integrated-as)
 else
 
 KBUILD_CFLAGS += $(call cc-option,-fno-delete-null-pointer-checks,)
@@ -1294,6 +1348,8 @@ help:
 	@echo  '                    (default: $$(INSTALL_MOD_PATH)/lib/firmware)'
 	@echo  '  dir/            - Build all files in dir and below'
 	@echo  '  dir/file.[oisS] - Build specified target only'
+	@echo  '  dir/file.ll     - Build the LLVM bitcode file'
+	@echo  '                    (requires compiler support for LLVM bitcode generation)'
 	@echo  '  dir/file.lst    - Build specified mixed source/assembly target only'
 	@echo  '                    (requires a recent binutils and recent build (System.map))'
 	@echo  '  dir/file.ko     - Build module including final link'
@@ -1569,6 +1625,10 @@ endif
 %.o: %.S prepare scripts FORCE
 	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
 %.symtypes: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.ll: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.ll: %.S prepare scripts FORCE
 	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
 
 # Modules
