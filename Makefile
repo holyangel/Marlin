@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 18
 SUBLEVEL = 70
-EXTRAVERSION = -HolyDragon-v0.0.8
+EXTRAVERSION = -HolyDragon-v0.0.9
 NAME = Shuffling Zombie Juror
 
 # *DOCUMENTATION*
@@ -407,7 +407,7 @@ include $(srctree)/scripts/Kbuild.include
 
 # Make variables (CC, etc...)
 AS		= $(CROSS_COMPILE)as
-LD		= $(CROSS_COMPILE)ld -fuse-ld=qcld --strip-debug
+LD		= $(CROSS_COMPILE)ld -fuse-ld=lld --strip-debug
 CC		= $(CROSS_COMPILE)gcc -g0
 CPP		= $(CC) -E -flto -fuse-linker-plugin
 AR		= $(LLVM_TRIPLE)ar
