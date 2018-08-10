@@ -250,6 +250,12 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/x86/ -e s/x86_64/x86/ \
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 ARCH		?= $(SUBARCH)
 CROSS_COMPILE	?= $(CONFIG_CROSS_COMPILE:"%"=%)
+HDK		:= /home/holyangel/android/Toolchains/sdc-a15-4.9.4/
+HDK_TC		:= /home/holyangel/android/Toolchains/sdc-a15-4.9.4/bin/
+ARCH		:= arm64
+SUBARCH		:= arm64
+CROSS_COMPILE	:= $(HDK_TC)aarch64-cortex_a57-linux-gnueabi-
+CROSS_COMPILE_ARM32	:= $(HDK_TC)arm-cortex_a15-linux-gnueabihf-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
