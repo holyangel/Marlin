@@ -402,14 +402,14 @@ include $(srctree)/scripts/Kbuild.include
 
 # Make variables (CC, etc...)
 AS		= $(CROSS_COMPILE)as
-CC		= $(CROSS_COMPILE)gcc
 LD		= $(HDK_TC)ld.lld -m aarch64linux --strip-debug --lto-O3
+CC		= $(CROSS_COMPILE)gcc -g0
 CPP		= $(CC) -E
-AR		= $(CROSS_COMPILE)ar
+AR		= $(LLVM_TRIPLE)ar
 NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
-OBJCOPY		= $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CROSS_COMPILE)objdump
+OBJCOPY		= $(CROSS_COMPILE)objcopy -g --strip-debug
+OBJDUMP		= $(LLVM_TRIPLE)objdump -arch=armv8-a -mcpu=kryo
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
 INSTALLKERNEL  := installkernel
