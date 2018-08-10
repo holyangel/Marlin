@@ -1,3 +1,4 @@
+ccflags-y := -Os
 obj-$(CONFIG_MSM_QDSP6_APRV2) += apr.o apr_v2.o apr_tal.o voice_svc.o
 obj-$(CONFIG_MSM_QDSP6_APRV3) += apr.o apr_v3.o apr_tal.o voice_svc.o
 obj-$(CONFIG_MSM_QDSP6_APRV2_GLINK) += apr.o apr_v2.o apr_tal_glink.o voice_svc.o
